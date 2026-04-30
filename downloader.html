@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="LunarYtdl — Download YouTube videos, audio, playlists." />
+  <title>LunarYtdl — Downloader</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body class="page--downloader">
+
+<!-- Canvas & Nebula -->
+<canvas id="starfield" aria-hidden="true"></canvas>
+<div class="nebula" aria-hidden="true">
+  <div class="nebula__blob nebula__blob--1"></div>
+  <div class="nebula__blob nebula__blob--2"></div>
+  <div class="nebula__blob nebula__blob--3"></div>
+</div>
+
+<!-- HEADER -->
+<header class="header" id="header">
+  <nav class="nav container">
+    <a href="index.html" class="logo" aria-label="LunarYtdl Home">
+      <img class="logo__icon" src="logo.png" alt="LunarYtdl" width="36" height="36" style="border-radius:50%;object-fit:cover;">
+      <span class="logo__text">Lunar<span class="logo__accent">Ytdl</span></span>
+    </a>
+
+    <ul class="nav__links" role="list">
+      <li><a href="index.html" class="nav__link">← Docs</a></li>
+      <li><a href="index.html#features" class="nav__link">Features</a></li>
+    </ul>
+
+    <button class="nav__burger" id="navBurger" aria-label="Toggle menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </nav>
+</header>
+
+<!-- DOWNLOADER SECTION -->
+<section class="downloader section downloader--full" id="downloader">
+  <div class="container">
+    <div class="section__header">
+      <span class="section__eyebrow">Mission Control</span>
+      <h2 class="section__title">Download Station</h2>
+    </div>
+
+    <!-- App Panel -->
+    <div class="app-panel" id="appPanel">
+
+      <!-- ── STEP 1: URL Input ─────────────────────────────── -->
+      <div class="panel__step panel__step--active" id="stepUrl" data-step="1">
+        <div class="url-input-group">
+          <div class="url-input-wrapper" id="urlInputWrapper">
+            <svg class="url-input__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <input
+              type="url"
+              id="urlInput"
+              class="url-input"
+              placeholder="Paste YouTube URL here — video, playlist, or channel…"
+              autocomplete="off"
+              spellcheck="false"
+              aria-label="YouTube URL"
+            />
+            <button class="url-paste-btn" id="pasteBtn" title="Paste from clipboard" aria-label="Paste URL">
+              <svg viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke="currentColor" stroke-width="2"/></svg>
+            </button>
+            <button class="url-clear-btn hidden" id="clearBtn" aria-label="Clear URL">
+              <svg viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            </button>
+          </div>
+
+          <div class="url-options-row">
+            <label class="toggle-label">
+              <input type="checkbox" id="playlistToggle" role="switch" />
+              <span class="toggle-track">
+                <span class="toggle-thumb"></span>
+              </span>
+              Download entire playlist
+            </label>
+
+            <button class="btn btn--primary btn--fetch" id="fetchBtn" disabled aria-busy="false">
+              <span class="btn-inner">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="2"/><path d="M21 21l-4.35-4.35" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Analyse
+              </span>
+              <span class="btn-loading" aria-hidden="true">
+                <span class="spinner"></span>
+                Fetching…
+              </span>
+            </button>
+          </div>
+
+          <!-- Validation message -->
+          <div class="url-validation" id="urlValidation" role="alert" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <!-- ── STEP 2: Video Info & Options ─────────────────── -->
+      <div class="panel__step hidden" id="stepInfo" data-step="2">
+        <!-- Video Meta Card -->
+        <div class="video-meta-card" id="videoMetaCard">
+          <div class="video-meta__thumb-wrap">
+            <img class="video-meta__thumb" id="videoThumb" src="" alt="" loading="lazy"/>
+            <div class="video-meta__duration" id="videoDuration"></div>
+          </div>
+          <div class="video-meta__info">
+            <div class="video-meta__badge" id="videoTypeBadge">Video</div>
+            <h3 class="video-meta__title" id="videoTitle">—</h3>
+            <p class="video-meta__channel" id="videoChannel">—</p>
+            <div class="video-meta__stats">
+              <span id="videoViews">—</span>
+              <span class="dot" aria-hidden="true">·</span>
+              <span id="videoDate">—</span>
+            </div>
+            <p class="video-meta__desc" id="videoDesc"></p>
+          </div>
+        </div>
+
+        <!-- Tabs: Video / Audio / Advanced -->
+        <div class="options-tabs" role="tablist" aria-label="Download options">
+          <button class="tab active" id="tabVideo" role="tab" aria-selected="true" aria-controls="panelVideo" data-tab="video">
+            <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Video
+          </button>
+          <button class="tab" id="tabAudio" role="tab" aria-selected="false" aria-controls="panelAudio" data-tab="audio">
+            <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="16" r="3" stroke="currentColor" stroke-width="2"/></svg>
+            Audio
+          </button>
+          <button class="tab" id="tabAdvanced" role="tab" aria-selected="false" aria-controls="panelAdvanced" data-tab="advanced">
+            <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke="currentColor" stroke-width="2"/></svg>
+            Advanced
+          </button>
+        </div>
+
+        <!-- Tab: Video Options -->
+        <div class="tab-panel tab-panel--active" id="panelVideo" role="tabpanel">
+          <div class="options-grid">
+            <div class="option-group">
+              <label class="option-label" for="qualitySelect">Video Quality</label>
+              <div class="select-wrapper">
+                <select id="qualitySelect" class="select">
+                  <option value="bestvideo+bestaudio">Best Available (Auto)</option>
+                  <optgroup label="Ultra HD" id="qualityGroupUHD"></optgroup>
+                  <optgroup label="Full HD / HD" id="qualityGroupHD"></optgroup>
+                  <optgroup label="Standard" id="qualityGroupSD"></optgroup>
+                </select>
+              </div>
+            </div>
+
+            <div class="option-group">
+              <label class="option-label" for="containerSelect">Container Format</label>
+              <div class="select-wrapper">
+                <select id="containerSelect" class="select">
+                  <option value="mp4">MP4 (Recommended)</option>
+                  <option value="mkv">MKV</option>
+                  <option value="webm">WebM</option>
+                  <option value="avi">AVI</option>
+                  <option value="mov">MOV</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="option-group option-group--checkboxes">
+              <label class="checkbox-label">
+                <input type="checkbox" id="embedThumbVideo" />
+                <span class="checkbox-custom"></span>
+                Embed thumbnail
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="embedMetaVideo" checked />
+                <span class="checkbox-custom"></span>
+                Embed metadata
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="embedChapters" />
+                <span class="checkbox-custom"></span>
+                Embed chapters
+              </label>
+            </div>
+          </div>
+
+          <!-- Format selector -->
+          <div class="option-group option-group--full">
+            <label class="option-label" for="rawFormatSelect">
+              Format Selector
+              <span class="option-hint">Supports yt-dlp syntax</span>
+            </label>
+            <div class="format-list-wrapper">
+              <div class="format-list" id="formatList" role="listbox" aria-label="Available formats"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Audio Options -->
+        <div class="tab-panel" id="panelAudio" role="tabpanel">
+          <div class="options-grid">
+            <div class="option-group">
+              <label class="option-label" for="audioFormatSelect">Audio Format</label>
+              <div class="select-wrapper">
+                <select id="audioFormatSelect" class="select">
+                  <option value="mp3">MP3 (Universal)</option>
+                  <option value="flac">FLAC (Lossless)</option>
+                  <option value="aac">AAC</option>
+                  <option value="ogg">OGG Vorbis</option>
+                  <option value="wav">WAV</option>
+                  <option value="opus">Opus</option>
+                  <option value="m4a">M4A</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="option-group">
+              <label class="option-label" for="audioQualitySelect">Audio Quality</label>
+              <div class="select-wrapper">
+                <select id="audioQualitySelect" class="select">
+                  <option value="0">Best (VBR 0)</option>
+                  <option value="2">High (VBR 2)</option>
+                  <option value="5">Medium (VBR 5)</option>
+                  <option value="9">Low (VBR 9)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="option-group option-group--checkboxes">
+              <label class="checkbox-label">
+                <input type="checkbox" id="embedThumbAudio" checked />
+                <span class="checkbox-custom"></span>
+                Embed album art
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="embedMetaAudio" checked />
+                <span class="checkbox-custom"></span>
+                Embed metadata (ID3)
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab: Advanced Options -->
+        <div class="tab-panel" id="panelAdvanced" role="tabpanel">
+          <div class="options-grid options-grid--3col">
+            <!-- Subtitles -->
+            <div class="option-group advanced-group">
+              <div class="advanced-group__header">
+                <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Subtitles
+              </div>
+              <label class="checkbox-label">
+                <input type="checkbox" id="writeSubtitles"/>
+                <span class="checkbox-custom"></span>
+                Download subtitles
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="writeAutoSubs"/>
+                <span class="checkbox-custom"></span>
+                Auto-generated captions
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="embedSubs"/>
+                <span class="checkbox-custom"></span>
+                Embed into video
+              </label>
+              <div class="option-group">
+                <label class="option-label" for="subLangInput">Languages</label>
+                <input type="text" id="subLangInput" class="input" placeholder="en,fr,de" value="en"/>
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="subFormatSelect">Format</label>
+                <div class="select-wrapper">
+                  <select id="subFormatSelect" class="select">
+                    <option value="srt">SRT</option>
+                    <option value="vtt">VTT</option>
+                    <option value="ass">ASS</option>
+                    <option value="json3">JSON3</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- Playlist -->
+            <div class="option-group advanced-group" id="playlistAdvanced">
+              <div class="advanced-group__header">
+                <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M4 6h16M4 12h16M4 18h7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Playlist Options
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="playlistStart">Start Index</label>
+                <input type="number" id="playlistStart" class="input" placeholder="1" min="1"/>
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="playlistEnd">End Index</label>
+                <input type="number" id="playlistEnd" class="input" placeholder="All" min="1"/>
+              </div>
+            </div>
+
+            <!-- Network -->
+            <div class="option-group advanced-group">
+              <div class="advanced-group__header">
+                <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M8.56 2.9A7 7 0 0120.54 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 12h.01M3 3l18 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                Network
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="proxyInput">Proxy URL</label>
+                <input type="text" id="proxyInput" class="input" placeholder="socks5://127.0.0.1:1080"/>
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="rateLimitInput">Rate Limit</label>
+                <input type="text" id="rateLimitInput" class="input" placeholder="e.g. 1M"/>
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="cookiesInput">Cookies from browser</label>
+                <div class="select-wrapper">
+                  <select id="cookiesInput" class="select">
+                    <option value="">None</option>
+                    <option value="chrome">Chrome</option>
+                    <option value="firefox">Firefox</option>
+                    <option value="safari">Safari</option>
+                    <option value="edge">Edge</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action Row — Single Dynamic Download Button -->
+        <div class="action-row">
+          <button class="btn btn--ghost btn--sm" id="backBtn">
+            <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M19 12H5M12 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Back
+          </button>
+
+          <div class="action-row__right">
+            <!-- Single dynamic download button -->
+            <button class="btn btn--primary" id="downloadBtn" data-mode="video">
+              <span class="download-btn__icon download-btn__icon--video">
+                <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </span>
+              <span class="download-btn__icon download-btn__icon--audio" style="display:none">
+                <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M9 18V5l12-2v13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/></svg>
+              </span>
+              <span id="downloadBtnLabel">Download Video</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── STEP 3: Progress ─────────────────────────────── -->
+      <div class="panel__step hidden" id="stepProgress" data-step="3">
+        <div class="progress-container">
+          <div class="progress-icon" id="progressIcon" aria-hidden="true">
+            <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle class="progress-ring__bg" cx="32" cy="32" r="28" stroke-width="4"/>
+              <circle class="progress-ring__fill" id="progressRing" cx="32" cy="32" r="28" stroke-width="4" stroke-linecap="round"/>
+              <text class="progress-ring__text" x="32" y="37" text-anchor="middle" id="progressPct">0%</text>
+            </svg>
+          </div>
+
+          <div class="progress-info">
+            <h3 class="progress-title" id="progressTitle">Initializing…</h3>
+            <p class="progress-subtitle" id="progressFilename"></p>
+
+            <div class="progress-bar-wrap">
+              <div class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Download progress">
+                <div class="progress-bar__fill" id="progressBarFill"></div>
+              </div>
+              <span class="progress-percent" id="progressPctText">0%</span>
+            </div>
+
+            <div class="progress-stats">
+              <span class="progress-stat" id="progressSpeed">—</span>
+              <span class="progress-stat" id="progressEta">—</span>
+              <span class="progress-stat" id="progressSize">—</span>
+            </div>
+          </div>
+
+          <div class="progress-actions">
+            <a class="btn btn--primary hidden" id="downloadFileBtn" href="#" download>
+              <svg viewBox="0 0 24 24" fill="none" width="16" height="16"><path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+              Save File
+            </a>
+            <button class="btn btn--ghost btn--sm" id="newDownloadBtn">
+              <svg viewBox="0 0 24 24" fill="none" width="14" height="14"><path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              New Download
+            </button>
+            <button class="btn btn--danger btn--sm hidden" id="cancelBtn">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /app-panel -->
+  </div>
+</section>
+
+<!-- Toast Notifications -->
+<div class="toast-container" id="toastContainer" aria-live="polite" role="status"></div>
+
+<!-- Footer -->
+<footer class="footer">
+  <div class="container footer__inner">
+    <div class="footer__brand">
+      <img class="logo__icon" src="logo.png" alt="LunarYtdl" width="28" height="28" style="border-radius:50%;object-fit:cover;">
+      <span class="footer__brand-name">LunarYtdl</span>
+    </div>
+    <p class="footer__disclaimer">
+      For personal use only. Respect YouTube's Terms of Service and copyright laws.
+    </p>
+  </div>
+  <div class="footer__copyright">
+    <div class="container">
+      <span>© 2025 LunarYtdl. All rights reserved.</span>
+      <span>Powered by yt-dlp · Built with 🌙 and ✨</span>
+    </div>
+  </div>
+</footer>
+
+<!-- Fixed creator credit -->
+<div class="creator-credit">Created by <strong>Syawaliuz Octavian</strong></div>
+
+<!-- History Toggle Button (hamburger, bottom-left) -->
+<button class="history-toggle-btn" id="historyToggleBtn" aria-label="Download History" title="Download History">
+  <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+    <line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+</button>
+
+<!-- History Panel -->
+<div class="history-panel" id="historyPanel" aria-hidden="true">
+  <div class="history-panel__backdrop" id="historyBackdrop"></div>
+  <div class="history-panel__sheet">
+    <div class="history-panel__header">
+      <div class="history-panel__title">
+        <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Download History
+      </div>
+      <div class="history-panel__actions">
+        <button class="btn btn--ghost btn--sm" id="clearHistoryBtn">Clear All</button>
+        <button class="history-panel__close" id="historyCloseBtn" aria-label="Close history">
+          <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="history-panel__body" id="historyList">
+      <div class="history-empty" id="historyEmpty">
+        <svg viewBox="0 0 24 24" fill="none" width="40" height="40" opacity="0.3"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="1.5"/></svg>
+        <p>No downloads yet.<br/>Your history will appear here.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WhatsApp Support Button -->
+<a href="https://wa.me/?text=Hi%2C%20I%20need%20help%20with%20LunarYtdl" 
+   class="wa-contact-btn" 
+   target="_blank" 
+   rel="noopener noreferrer"
+   title="Contact Support"
+   aria-label="Contact support via WhatsApp">
+  <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
+    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+  </svg>
+  <span>Support</span>
+</a>
+
+<!-- Scripts -->
+<script src="js/stars.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/downloader.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
