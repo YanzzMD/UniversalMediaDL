@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>LunarMediaDL — Instagram Downloader</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body class="page--downloader">
+
+<canvas id="starfield" aria-hidden="true"></canvas>
+<div class="nebula" aria-hidden="true">
+  <div class="nebula__blob nebula__blob--1"></div><div class="nebula__blob nebula__blob--2"></div><div class="nebula__blob nebula__blob--3"></div>
+</div>
+
+<header class="header" id="header">
+  <nav class="nav container">
+    <a href="index.html" class="logo">
+      <img class="logo__icon" src="logo.png" alt="LunarMediaDL" width="36" height="36" style="border-radius:50%;object-fit:cover;">
+      <span class="logo__text">Lunar<span class="logo__accent">MediaDL</span></span>
+    </a>
+    <ul class="nav__links" role="list">
+      <li><a href="index.html" class="nav__link">← Back to Home</a></li>
+    </ul>
+  </nav>
+</header>
+
+<section class="downloader section downloader--full" id="downloader">
+  <div class="container">
+    <div class="section__header">
+      <span class="section__eyebrow">Instagram Downloader</span>
+      <h2 class="section__title">Download Video & Sound Tanpa Watermark</h2>
+    </div>
+
+    <!-- UI Panel -->
+    <div class="app-panel" id="appPanel">
+      <!-- Step 1: Input URL -->
+      <div class="panel__step panel__step--active" id="stepUrl" data-step="1">
+        <div class="url-input-group">
+          <div class="url-input-wrapper" id="urlInputWrapper">
+            <svg class="url-input__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+            <input type="url" id="urlInput" class="url-input" placeholder="Paste URL Instagram di sini" autocomplete="off" />
+            <button class="url-paste-btn" id="pasteBtn" title="Paste"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/><rect x="9" y="9" width="13" height="13" rx="2"/></svg></button>
+            <button class="url-clear-btn hidden" id="clearBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          </div>
+          <div class="url-options-row">
+            <button class="btn btn--primary btn--fetch" id="fetchBtn" disabled>
+              <span class="btn-inner">Analyse Instagram</span>
+              <span class="btn-loading"><span class="spinner"></span> Fetching...</span>
+            </button>
+          </div>
+          <div class="url-validation" id="urlValidation"></div>
+        </div>
+      </div>
+
+      <!-- Step 2: Info & Format Options (Sama persis dengan ytdl) -->
+      <div class="panel__step hidden" id="stepInfo" data-step="2">
+        <div class="video-meta-card" id="videoMetaCard">
+          <div class="video-meta__thumb-wrap"><img class="video-meta__thumb" id="videoThumb" src="" alt=""/><div class="video-meta__duration" id="videoDuration"></div></div>
+          <div class="video-meta__info">
+            <div class="video-meta__badge" id="videoTypeBadge">Video</div>
+            <h3 class="video-meta__title" id="videoTitle">—</h3>
+            <p class="video-meta__channel" id="videoChannel">—</p>
+          </div>
+        </div>
+
+        <div class="options-tabs" role="tablist">
+          <button class="tab active" data-tab="video">Video (No Watermark)</button>
+          <button class="tab" data-tab="audio">Original Sound (Audio)</button>
+        </div>
+
+        <div class="tab-panel tab-panel--active" id="panelVideo">
+          <div class="options-grid">
+            <div class="option-group">
+              <label class="option-label">Video Quality</label>
+              <div class="select-wrapper"><select id="qualitySelect" class="select"><option value="bestvideo+bestaudio/best">Best Available (Auto)</option></select></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" id="panelAudio">
+          <div class="options-grid">
+            <div class="option-group">
+              <label class="option-label">Audio Format</label>
+              <div class="select-wrapper"><select id="audioFormatSelect" class="select"><option value="mp3">MP3</option><option value="flac">FLAC</option></select></div>
+            </div>
+            <input type="hidden" id="audioQualitySelect" value="0">
+          </div>
+        </div>
+
+        <!-- Hidden Checkboxes for Universal Compatibility -->
+        <input type="hidden" id="embedThumbVideo" checked>
+        <input type="hidden" id="embedMetaVideo" checked>
+        <input type="hidden" id="embedThumbAudio" checked>
+        <input type="hidden" id="embedMetaAudio" checked>
+
+        <div class="action-row">
+          <button class="btn btn--ghost btn--sm" id="backBtn">Back</button>
+          <button class="btn btn--primary" id="downloadBtn"><span id="downloadBtnLabel">Download Media</span></button>
+        </div>
+      </div>
+
+      <!-- Step 3: Progress -->
+      <div class="panel__step hidden" id="stepProgress" data-step="3">
+        <div class="progress-container">
+          <div class="progress-info">
+            <h3 class="progress-title" id="progressTitle">Downloading...</h3>
+            <p class="progress-subtitle" id="progressFilename"></p>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar"><div class="progress-bar__fill" id="progressBarFill"></div></div>
+              <span class="progress-percent" id="progressPctText">0%</span>
+            </div>
+            <div class="progress-stats">
+              <span class="progress-stat" id="progressSpeed">—</span>
+              <span class="progress-stat" id="progressEta">—</span>
+            </div>
+          </div>
+          <div class="progress-actions">
+            <a class="btn btn--primary hidden" id="downloadFileBtn" href="#" download>Save File</a>
+            <button class="btn btn--ghost btn--sm" id="newDownloadBtn">New Download</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- Toast & Footers -->
+<div class="toast-container" id="toastContainer"></div>
+<div class="creator-credit">Created by <strong>Syawaliuz Octavian</strong></div>
+
+<script src="js/ui.js"></script>
+<script src="js/downloader.js"></script>
+<script src="js/instagram.js"></script>
+</body>
+</html>
