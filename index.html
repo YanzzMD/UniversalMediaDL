@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="LunarMediaDL — Advanced Media Downloader for all platforms." />
+  <title>LunarMediaDL — Documentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/animations.css" />
+</head>
+<body>
+
+<canvas id="starfield" aria-hidden="true"></canvas>
+<div class="nebula" aria-hidden="true">
+  <div class="nebula__blob nebula__blob--1"></div><div class="nebula__blob nebula__blob--2"></div><div class="nebula__blob nebula__blob--3"></div>
+</div>
+
+<header class="header" id="header">
+  <nav class="nav container">
+    <a href="/" class="logo" aria-label="LunarMediaDL Home">
+      <img class="logo__icon" src="logo.png" alt="LunarMediaDL" width="36" height="36" style="border-radius:50%;object-fit:cover;">
+      <span class="logo__text">Lunar<span class="logo__accent">MediaDL</span></span>
+    </a>
+    <ul class="nav__links" role="list">
+      <li><a href="#features" class="nav__link">Features</a></li>
+      <li><a href="#platforms" class="nav__link">Platforms</a></li>
+      <li><a href="universal.html" class="btn btn--primary btn--sm">🚀 Universal App</a></li>
+    </ul>
+  </nav>
+</header>
+
+<section class="hero" id="hero">
+  <div class="container hero__inner">
+    <div class="hero__badge"><span class="pulse-dot"></span>Powered by yt-dlp engine</div>
+    <h1 class="hero__title">
+      <span class="hero__title-line">Download the</span>
+      <span class="hero__title-line hero__title-gradient">Universe of Media</span>
+    </h1>
+    <p class="hero__subtitle">The most powerful universal downloader. Supports 1000+ platforms including YouTube, TikTok, Instagram, Twitter, and more.</p>
+    <div class="hero__actions">
+      <a href="#platforms" class="btn btn--primary btn--lg">Explore Platforms</a>
+    </div>
+  </div>
+</section>
+
+<!-- PLATFORMS SECTION BARU -->
+<section class="section" id="platforms">
+  <div class="container">
+    <div class="section__header">
+      <span class="section__eyebrow">All-in-One Downloader</span>
+      <h2 class="section__title">Supported Platforms</h2>
+      <p class="section__desc">LunarMediaDL didukung oleh yt-dlp, memungkinkan Anda mengunduh dari 1000+ platform tanpa terkecuali. Pilih platform target Anda.</p>
+    </div>
+
+    <div class="features__grid">
+      <!-- YouTube -->
+      <div class="feature-card">
+        <h3>🔴 YouTube</h3>
+        <p><strong>Keunggulan:</strong> Mendukung hingga resolusi 8K, ekstrak audio lossless (FLAC/WAV), unduh playlist lengkap, dan embed metadata serta thumbnail secara langsung.</p><br/>
+        <a href="downloader.html" class="btn btn--primary btn--sm" style="width:100%">Buka YouTube DL</a>
+      </div>
+
+      <!-- TikTok -->
+      <div class="feature-card">
+        <h3>🎵 TikTok</h3>
+        <p><strong>Keunggulan:</strong> Unduh video tanpa watermark (otomatis), ekstrak original sound (MP3), proses yang sangat cepat, ringan, dan mendukung semua format TikTok.</p><br/>
+        <a href="tiktok.html" class="btn btn--primary btn--sm" style="width:100%">Buka TikTok DL</a>
+      </div>
+
+      <!-- Instagram -->
+      <div class="feature-card">
+        <h3>📸 Instagram</h3>
+        <p><strong>Keunggulan:</strong> Mendukung pengunduhan Reels, IGTV, dan Post. Kualitas video original maksimal, mendukung embed deskripsi IG langsung ke metadata file Anda.</p><br/>
+        <a href="instagram.html" class="btn btn--primary btn--sm" style="width:100%">Buka Instagram DL</a>
+      </div>
+
+      <!-- Universal / Others -->
+      <div class="feature-card feature-card--large">
+        <h3>🌐 1000+ Platform Lainnya (Universal)</h3>
+        <p><strong>Keunggulan:</strong> Mendukung penuh Facebook, Twitter (X), Vimeo, Reddit, Twitch, Soundcloud, Pinterest, Bilibili, Vevo, Dailymotion, dan ribuan situs lainnya tanpa satupun yang terlewat. Sistem secara otomatis mendeteksi platform dari URL yang dimasukkan.</p><br/>
+        <a href="universal.html" class="btn btn--primary btn--sm" style="width:100%; text-align:center;">Buka Universal Downloader (Semua Situs)</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="container footer__inner">
+    <div class="footer__brand">
+      <img class="logo__icon" src="logo.png" alt="LunarMediaDL" width="28" height="28" style="border-radius:50%;object-fit:cover;">
+      <span class="footer__brand-name">LunarMediaDL</span>
+    </div>
+    <p class="footer__disclaimer">For personal use only. Respect platform Terms of Service and copyright laws.</p>
+  </div>
+</footer>
+<div class="creator-credit">Created by <strong>Syawaliuz Octavian</strong></div>
+
+<script src="js/stars.js"></script>
+<script src="js/ui.js"></script>
+<script>document.addEventListener('DOMContentLoaded', () => { if (typeof UI !== 'undefined') UI.init(); });</script>
+</body>
+</html>
