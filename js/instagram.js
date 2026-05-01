@@ -106,6 +106,70 @@
     $('newDownloadBtn').classList.remove('hidden');
   }
 
+// ════════════════════════════════════════════════════════════
+//  HISTORY SYSTEM (Copied from app.js for universal use)
+// ════════════════════════════════════════════════════════════
+const historyToggleBtn = $('historyToggleBtn');
+const historyPanel     = $('historyPanel');
+const historyBackdrop  = $('historyBackdrop');
+const historyCloseBtn  = $('historyCloseBtn');
+const historyList      = $('historyList');
+const historyEmpty     = $('historyEmpty');
+const clearHistoryBtn  = $('clearHistoryBtn');
+
+// Simplified History object to avoid errors if main app.js isn't loaded
+const History = window.History || (function() {
+  function load() {
+    try { return JSON.parse(localStorage.getItem('lunarytdl_user_history') || '[]'); } catch { return []; }
+  }
+  return { load: load, clear: () => localStorage.removeItem('lunarytdl_user_history') };
+})();
+
+function renderHistory() {
+  if (!historyList) return;
+  const items = History.load();
+  historyList.querySelectorAll('.history-item').forEach(el => el.remove());
+  if (!items.length) {
+    if (historyEmpty) historyEmpty.style.display = '';
+    return;
+  }
+  if (historyEmpty) historyEmpty.style.display = 'none';
+  // Note: Rendering logic for items is complex and resides in app.js
+  // This version just shows/hides the empty state correctly.
+  // For full functionality, ensure history is managed by a shared script.
+}
+
+function openHistory() {
+  renderHistory();
+  historyPanel.classList.add('open');
+  historyPanel.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeHistory() {
+  historyPanel.classList.remove('open');
+  historyPanel.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+}
+
+if (historyToggleBtn) historyToggleBtn.addEventListener('click', openHistory);
+if (historyCloseBtn)  historyCloseBtn.addEventListener('click', closeHistory);
+if (historyBackdrop)  historyBackdrop.addEventListener('click', closeHistory);
+if (clearHistoryBtn)  clearHistoryBtn.addEventListener('click', () => {
+  if (confirm('Clear all download history?')) {
+    History.clear();
+    renderHistory();
+    UI.toast('History cleared.', 'info');
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && historyPanel?.classList.contains('open')) closeHistory();
+});
+
+// Initial render call
+renderHistory();
+  
   $('backBtn').addEventListener('click', () => UI.showStep('stepUrl'));
   $('newDownloadBtn').addEventListener('click', () => { urlInput.value = ''; UI.showStep('stepUrl'); $('downloadFileBtn').classList.add('hidden'); });
 
