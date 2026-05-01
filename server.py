@@ -349,12 +349,29 @@ def _download_worker(job_id: str, url: str, opts: dict):
     if audio_only:
         args +=["-x", "--audio-format", audio_format, "--audio-quality", "0"]
     elif format_id:
-        # Menambahkan fallback bestaudio untuk memastikan format_id yang dipilih (HD) punya suara
-        args +=["-f", f"{format_id}+bestaudio[ext=m4a]/{format_id}+bestaudio/{format_id}"]
+        # Full fallback chain: specific format → best mp4 → best available
+        args +=[
+            "-f",
+            f"{format_id}+bestaudio[ext=m4a]"
+            f"/{format_id}+bestaudio"
+            f"/{format_id}"
+            f"/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+            f"/bestvideo+bestaudio"
+            f"/best"
+        ]
     elif quality and quality not in ("best", "bestvideo+bestaudio", ""):
-        args += ["-f", f"{quality}+bestaudio[ext=m4a]/{quality}+bestaudio/{quality}"]
+        args += [
+            "-f",
+            f"{quality}+bestaudio[ext=m4a]"
+            f"/{quality}+bestaudio"
+            f"/{quality}"
+            f"/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+            f"/bestvideo+bestaudio"
+            f"/best"
+        ]
     else:
-        args += ["-f", "bestvideo+bestaudio/best"]
+        # Default: prefer mp4+m4a for broadest compatibility, fallback to best
+        args += ["-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"]
 
     # ── Playlist ──────────────────────────────────────────────────────────────
     if not playlist:
