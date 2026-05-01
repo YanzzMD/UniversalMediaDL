@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-LunarMediaDL - Backend Server
-Production-ready Universal Downloader API powered by yt-dlp
-Supports YouTube, TikTok, Instagram, and 1000+ other platforms.
+LunarYtdl - Backend Server
+Production-ready YouTube downloader API powered by yt-dlp
+Author: Syawaliuz Octavian
+v2.0 — History API, FLAC fix, improved file detection
 """
 
 import os
 import sys
-import base64
 import json
 import uuid
 import time
@@ -16,10 +16,10 @@ import logging
 import re
 import subprocess
 from pathlib import Path
-from datetime import datetime
-from urllib.parse import urlparse
+from datetime import datetime, timedelta
+from urllib.parse import urlparse, parse_qs
 
-from flask import Flask, request, jsonify, send_file, send_from_directory
+from flask import Flask, request, jsonify, send_file, Response, stream_with_context
 from flask_cors import CORS
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -28,8 +28,6 @@ DOWNLOAD_DIR = BASE_DIR / "downloads"
 LOG_DIR      = BASE_DIR / "logs"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
-
-COOKIES_FILE = BASE_DIR / "cookies.txt"
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -40,25 +38,37 @@ logging.basicConfig(
         logging.FileHandler(LOG_DIR / "server.log"),
     ],
 )
-logger = logging.getLogger("LunarMediaDL")
+logger = logging.getLogger("LunarYtdl")
 
 # ─── App Init ─────────────────────────────────────────────────────────────────
-app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
+app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ─── In-Memory Job Store ──────────────────────────────────────────────────────
 jobs      = {}
 jobs_lock = threading.Lock()
 
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def is_valid_url(url: str) -> bool:
-    """Menerima semua platform yang didukung yt-dlp (HTTP/HTTPS)"""
-    url_stripped = url.strip()
-    return url_stripped.startswith("http://") or url_stripped.startswith("https://")
+VALID_YOUTUBE_PATTERNS = [
+    r"^https?://(www\.)?youtube\.com/watch\?v=[\w-]{11}",
+    r"^https?://youtu\.be/[\w-]{11}",
+    r"^https?://(www\.)?youtube\.com/shorts/[\w-]{11}",
+    r"^https?://(www\.)?youtube\.com/playlist\?list=[\w-]+",
+    r"^https?://(www\.)?youtube\.com/@[\w.-]+",
+    r"^https?://(www\.)?youtube\.com/channel/[\w-]+",
+    r"^https?://(www\.)?youtube\.com/c/[\w-]+",
+    r"^https?://(www\.)?youtube\.com/embed/[\w-]{11}",
+]
+
+def is_valid_youtube_url(url: str) -> bool:
+    return any(re.match(p, url.strip()) for p in VALID_YOUTUBE_PATTERNS)
+
 
 def sanitize_filename(name: str) -> str:
     return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", name)[:200]
+
 
 def cleanup_old_files(max_age_hours: int = 4):
     """Remove download files older than max_age_hours."""
@@ -71,63 +81,33 @@ def cleanup_old_files(max_age_hours: int = 4):
             except OSError:
                 pass
 
-def _ensure_cookies():
-    """Decode env var ke cookies.txt — dipanggil lazy saat pertama kali dibutuhkan."""
-    b64 = os.environ.get("YOUTUBE_COOKIES_B64", "").strip()
-    if not b64:
-        return
-    if COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0:
-        return
-    try:
-        decoded = base64.b64decode(b64)
-        COOKIES_FILE.write_bytes(decoded)
-        logger.info(f"Cookies written from env var ({len(decoded)} bytes)")
-    except Exception as e:
-        logger.warning(f"Failed to decode YOUTUBE_COOKIES_B64: {e}")
-
-def get_cookies_args() -> list:
-    _ensure_cookies()
-    if COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0:
-        return ["--cookies", str(COOKIES_FILE)]
-    return[]
 
 def run_ytdlp(args: list) -> subprocess.CompletedProcess:
     cmd = ["yt-dlp"] + args
     return subprocess.run(cmd, capture_output=True, text=True, timeout=300)
 
+
 def _find_latest_file(job_id: str = None, hint_name: str = None) -> Path | None:
     """Find the most recently modified file in DOWNLOAD_DIR."""
+    # If we have a hint, try to find it directly first
     if hint_name:
         hint_path = Path(hint_name)
         if hint_path.exists():
             return hint_path
+        # Try within DOWNLOAD_DIR
         candidate = DOWNLOAD_DIR / hint_path.name
         if candidate.exists():
             return candidate
 
-    files = sorted([f for f in DOWNLOAD_DIR.glob("*.*") if f.is_file()],
+    files = sorted(
+        [f for f in DOWNLOAD_DIR.glob("*.*") if f.is_file()],
         key=lambda f: f.stat().st_mtime,
         reverse=True,
     )
     return files[0] if files else None
 
+
 # ─── Routes ───────────────────────────────────────────────────────────────────
-
-@app.route("/", methods=["GET"])
-def serve_index():
-    return send_from_directory(str(BASE_DIR), "index.html")
-
-@app.route("/downloader", methods=["GET"])
-@app.route("/downloader.html", methods=["GET"])
-def serve_downloader():
-    return send_from_directory(str(BASE_DIR), "downloader.html")
-
-@app.route("/<path:filename>", methods=["GET"])
-def serve_static(filename):
-    if filename.startswith("api/"):
-        from flask import abort
-        abort(404)
-    return send_from_directory(str(BASE_DIR), filename)
 
 @app.route("/api/health", methods=["GET"])
 def health_check():
@@ -139,17 +119,13 @@ def health_check():
     except Exception as e:
         ytdlp_version = f"error: {e}"
 
-    _ensure_cookies()
-    cookies_ok  = COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0
-    cookies_src = "env_var" if os.environ.get("YOUTUBE_COOKIES_B64") else ("file" if cookies_ok else "none")
     return jsonify({
-        "status":         "online",
-        "server":         "LunarMediaDL v2.0.0",
-        "ytdlp_version":  ytdlp_version,
-        "timestamp":      datetime.utcnow().isoformat(),
-        "cookies_loaded": cookies_ok,
-        "cookies_source": cookies_src,
+        "status":        "online",
+        "server":        "LunarYtdl v2.0.0",
+        "ytdlp_version": ytdlp_version,
+        "timestamp":     datetime.utcnow().isoformat(),
     })
+
 
 @app.route("/api/info", methods=["POST"])
 def fetch_info():
@@ -158,22 +134,20 @@ def fetch_info():
 
     if not url:
         return jsonify({"error": "URL is required"}), 400
-    if not is_valid_url(url):
-        return jsonify({"error": "Invalid or unsupported URL"}), 422
+    if not is_valid_youtube_url(url):
+        return jsonify({"error": "Invalid or unsupported YouTube URL"}), 422
 
     logger.info(f"Fetching info for: {url}")
 
-    args =[
+    args = [
         url, "--dump-json",
         "--no-playlist" if not data.get("playlist") else "--yes-playlist",
         "--no-warnings", "--socket-timeout", "30", "--retries", "3",
-    ] + get_cookies_args()
-
-    # Apply Proxy & Cookies From Browser Settings
-    if data.get("cookies_from_browser"):
-        args +=["--cookies-from-browser", data.get("cookies_from_browser")]
-    if data.get("proxy"):
-        args += ["--proxy", data.get("proxy")]
+        # Force Android + web player client to bypass cloud-IP bot detection
+        "--extractor-args", "youtube:player_client=android,web",
+        # Skip format availability check during info fetch (avoids false-positive errors)
+        "--no-check-formats",
+    ]
 
     try:
         result = run_ytdlp(args)
@@ -185,21 +159,29 @@ def fetch_info():
     if result.returncode != 0:
         err_msg = result.stderr.strip().split("\n")[-1]
         logger.warning(f"yt-dlp info error: {err_msg}")
+        if "Video unavailable" in result.stderr:
+            return jsonify({"error": "Video is unavailable or private"}), 404
+        if "Sign in" in result.stderr:
+            return jsonify({"error": "Video requires login (age-restricted)"}), 403
+        if "Requested format is not available" in result.stderr:
+            return jsonify({"error": "Format tidak tersedia. Coba lagi — YouTube mungkin membatasi akses dari server ini."}), 400
+        if "This video is not available" in result.stderr:
+            return jsonify({"error": "Video tidak tersedia di region server ini."}), 400
         return jsonify({"error": f"Failed to fetch media info: {err_msg}"}), 400
 
-    lines =[l for l in result.stdout.strip().split("\n") if l.startswith("{")]
+    lines = [l for l in result.stdout.strip().split("\n") if l.startswith("{")]
     if not lines:
-        return jsonify({"error": "No media data returned"}), 400
+        return jsonify({"error": "No video data returned"}), 400
 
     try:
         meta = json.loads(lines[0])
     except json.JSONDecodeError:
-        return jsonify({"error": "Failed to parse media data"}), 500
+        return jsonify({"error": "Failed to parse video data"}), 500
 
     # Build format list
-    formats =[]
+    formats = []
     seen    = set()
-    for f in (meta.get("formats") or[]):
+    for f in (meta.get("formats") or []):
         fid    = f.get("format_id", "")
         ext    = f.get("ext", "")
         vcodec = f.get("vcodec", "none")
@@ -213,7 +195,7 @@ def fetch_info():
         if vcodec == "none" and acodec == "none":
             continue
 
-        label_parts =[]
+        label_parts = []
         if height:            label_parts.append(f"{height}p")
         if fps and fps > 30:  label_parts.append(f"{int(fps)}fps")
         if ext:               label_parts.append(ext.upper())
@@ -242,12 +224,12 @@ def fetch_info():
     subtitles = {}
     for lang, subs in (meta.get("subtitles") or {}).items():
         if subs:
-            subtitles[lang] =[{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
+            subtitles[lang] = [{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
 
     auto_subs = {}
     for lang, subs in (meta.get("automatic_captions") or {}).items():
         if subs:
-            auto_subs[lang] =[{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
+            auto_subs[lang] = [{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
 
     is_playlist    = data.get("playlist") and len(lines) > 1
     playlist_count = len(lines) if is_playlist else None
@@ -276,6 +258,7 @@ def fetch_info():
     logger.info(f"Info fetched: {meta.get('title')!r} | {len(formats)} formats")
     return jsonify(response)
 
+
 @app.route("/api/download/start", methods=["POST"])
 def start_download():
     data = request.get_json(silent=True) or {}
@@ -283,8 +266,8 @@ def start_download():
 
     if not url:
         return jsonify({"error": "URL is required"}), 400
-    if not is_valid_url(url):
-        return jsonify({"error": "Invalid URL"}), 422
+    if not is_valid_youtube_url(url):
+        return jsonify({"error": "Invalid YouTube URL"}), 422
 
     job_id = str(uuid.uuid4())
 
@@ -312,6 +295,7 @@ def start_download():
     logger.info(f"Download job {job_id[:8]} started for {url}")
     return jsonify({"job_id": job_id})
 
+
 def _download_worker(job_id: str, url: str, opts: dict):
     """Background thread: runs yt-dlp and updates job state."""
     cleanup_old_files()
@@ -332,9 +316,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
     rate_limit   = opts.get("rate_limit")
     proxy        = opts.get("proxy")
 
-    output_template = str(DOWNLOAD_DIR / "%(title)s.%(ext)s")
-
-    args =[
+    args = [
         url,
         "--output", output_template,
         "--no-warnings",
@@ -343,14 +325,19 @@ def _download_worker(job_id: str, url: str, opts: dict):
         "--fragment-retries", "5",
         "--newline",
         "--progress",
+        # Force Android + web player client to bypass cloud-IP bot detection
+        "--extractor-args", "youtube:player_client=android,web",
+        "--no-check-formats",
     ]
 
     # ── Format selection ──────────────────────────────────────────────────────
     if audio_only:
-        args +=["-x", "--audio-format", audio_format, "--audio-quality", "0"]
+        # Audio extraction: -x flag handles everything, audio-quality 0 = best
+        args += ["-x", "--audio-format", audio_format, "--audio-quality", "0"]
+
     elif format_id:
         # Full fallback chain: specific format → best mp4 → best available
-        args +=[
+        args += [
             "-f",
             f"{format_id}+bestaudio[ext=m4a]"
             f"/{format_id}+bestaudio"
@@ -359,6 +346,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
             f"/bestvideo+bestaudio"
             f"/best"
         ]
+
     elif quality and quality not in ("best", "bestvideo+bestaudio", ""):
         args += [
             "-f",
@@ -369,6 +357,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
             f"/bestvideo+bestaudio"
             f"/best"
         ]
+
     else:
         # Default: prefer mp4+m4a for broadest compatibility, fallback to best
         args += ["-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best"]
@@ -377,7 +366,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
     if not playlist:
         args.append("--no-playlist")
     else:
-        args +=[
+        args += [
             "--yes-playlist",
             "--output",
             str(DOWNLOAD_DIR / "%(playlist_title)s/%(playlist_index)s - %(title)s.%(ext)s"),
@@ -385,11 +374,11 @@ def _download_worker(job_id: str, url: str, opts: dict):
 
     # ── Subtitles ─────────────────────────────────────────────────────────────
     if subtitles:
-        args +=["--write-subs", "--sub-langs", subtitle_lang, "--sub-format", sub_format]
+        args += ["--write-subs", "--sub-langs", subtitle_lang, "--sub-format", sub_format]
     if auto_subs:
-        args +=["--write-auto-subs", "--sub-langs", subtitle_lang]
+        args += ["--write-auto-subs", "--sub-langs", subtitle_lang]
     if write_subs:
-        args +=["--embed-subs"]
+        args += ["--embed-subs"]
 
     # ── Metadata / Thumbnail ──────────────────────────────────────────────────
     if embed_thumb:
@@ -397,18 +386,19 @@ def _download_worker(job_id: str, url: str, opts: dict):
     if embed_meta:
         args.append("--embed-metadata")
 
-    # ── Network & Cookies ─────────────────────────────────────────────────────
+    # ── Network ───────────────────────────────────────────────────────────────
     if rate_limit:
-        args +=["--rate-limit", str(rate_limit)]
+        args += ["--rate-limit", str(rate_limit)]
     if proxy:
-        args +=["--proxy", proxy]
+        args += ["--proxy", proxy]
     if cookies_from:
-        args +=["--cookies-from-browser", cookies_from]
-    args += get_cookies_args()
+        args += ["--cookies-from-browser", cookies_from]
 
     # ── Post-processing ───────────────────────────────────────────────────────
+    # FIX: Only add merge-output-format for video downloads
+    # For audio (especially FLAC/WAV), this flag interferes with post-processing
     if not audio_only:
-        args +=["--merge-output-format", "mp4", "--add-metadata"]
+        args += ["--merge-output-format", "mp4", "--add-metadata"]
 
     with jobs_lock:
         jobs[job_id]["status"] = "downloading"
@@ -449,7 +439,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
                         jobs[job_id]["eta"]      = eta
                         jobs[job_id]["filesize"] = total
 
-            # Detect output filename
+            # Detect output filename — multiple patterns
             if "Destination:" in line:
                 parts = line.split("Destination:")
                 if len(parts) > 1:
@@ -458,7 +448,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
             if "[ExtractAudio]" in line and "Destination:" in line:
                 output_filename = line.split("Destination:")[-1].strip()
 
-            # Detect "already been downloaded" for re-runs
+            # FIX: Also detect "already been downloaded" for re-runs
             if "has already been downloaded" in line:
                 m = re.search(r"\[download\]\s+(.+?)\s+has already been downloaded", line)
                 if m:
@@ -469,6 +459,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
         proc.wait(timeout=600)
 
         if proc.returncode == 0:
+            # Find the most recent file
             if not output_filename or not Path(output_filename).exists():
                 output_filename = str(_find_latest_file(hint_name=output_filename) or "")
 
@@ -480,9 +471,10 @@ def _download_worker(job_id: str, url: str, opts: dict):
 
             logger.info(f"Job {job_id[:8]} completed: {output_filename}")
         else:
-            # Check if file exists (e.g. warning but file completed successfully)
+            # FIX: Even if returncode != 0, check if file exists (e.g. FLAC post-proc warning)
             candidate = _find_latest_file(hint_name=output_filename)
             if candidate and candidate.stat().st_mtime > time.time() - 30:
+                # File created recently — treat as success despite exit code
                 logger.warning(f"Job {job_id[:8]} exited {proc.returncode} but file found: {candidate}")
                 with jobs_lock:
                     jobs[job_id]["status"]   = "completed"
@@ -510,6 +502,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
             jobs[job_id]["status"] = "error"
             jobs[job_id]["error"]  = str(e)
 
+
 @app.route("/api/download/status/<job_id>", methods=["GET"])
 def job_status(job_id: str):
     with jobs_lock:
@@ -529,6 +522,7 @@ def job_status(job_id: str):
         "error":     job["error"],
     })
 
+
 @app.route("/api/download/file/<job_id>", methods=["GET"])
 def serve_file(job_id: str):
     with jobs_lock:
@@ -546,8 +540,8 @@ def serve_file(job_id: str):
     filename = Path(filepath).name
     return send_file(filepath, as_attachment=True, download_name=sanitize_filename(filename))
 
+
 @app.route("/api/download/cancel/<job_id>", methods=["DELETE"])
-@app.route("/api/history/<job_id>", methods=["DELETE"])
 def cancel_job(job_id: str):
     with jobs_lock:
         job = jobs.pop(job_id, None)
@@ -562,7 +556,98 @@ def cancel_job(job_id: str):
         except OSError:
             pass
 
-    return jsonify({"message": "Job cancelled and file removed"})
+    return jsonify({"message": "Job cancelled"})
+
+
+# ─── History endpoint ─────────────────────────────────────────────────────────
+# The history is primarily stored client-side, but we expose a DELETE endpoint
+# so the frontend can request server-side file cleanup per user.
+
+@app.route("/api/history/<job_id>", methods=["DELETE"])
+def delete_history_entry(job_id: str):
+    """Delete a history entry's server file (if still exists)."""
+    with jobs_lock:
+        job = jobs.pop(job_id, None)
+
+    if job:
+        filepath = job.get("filepath")
+        if filepath and Path(filepath).exists():
+            try:
+                Path(filepath).unlink()
+            except OSError:
+                pass
+
+    return jsonify({"message": "History entry removed"})
+
+
+@app.route("/api/formats", methods=["POST"])
+def get_formats():
+    data = request.get_json(silent=True) or {}
+    url  = (data.get("url") or "").strip()
+
+    if not url or not is_valid_youtube_url(url):
+        return jsonify({"error": "Invalid URL"}), 422
+
+    try:
+        result = run_ytdlp([url, "--list-formats", "--no-warnings", "--no-playlist"])
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Timeout fetching formats"}), 504
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp not installed"}), 500
+
+    if result.returncode != 0:
+        return jsonify({"error": "Failed to fetch formats"}), 400
+
+    return jsonify({"formats_text": result.stdout})
+
+
+@app.route("/api/subtitles", methods=["POST"])
+def list_subtitles():
+    data = request.get_json(silent=True) or {}
+    url  = (data.get("url") or "").strip()
+
+    if not url or not is_valid_youtube_url(url):
+        return jsonify({"error": "Invalid URL"}), 422
+
+    try:
+        result = run_ytdlp([url, "--list-subs", "--no-warnings", "--no-playlist"])
+    except subprocess.TimeoutExpired:
+        return jsonify({"error": "Timeout"}), 504
+    except FileNotFoundError:
+        return jsonify({"error": "yt-dlp not installed"}), 500
+
+    return jsonify({"subtitles_text": result.stdout})
+
+
+@app.route("/api/thumbnail", methods=["POST"])
+def download_thumbnail():
+    data = request.get_json(silent=True) or {}
+    url  = (data.get("url") or "").strip()
+
+    if not url or not is_valid_youtube_url(url):
+        return jsonify({"error": "Invalid URL"}), 422
+
+    job_id = str(uuid.uuid4())
+
+    try:
+        result = run_ytdlp([
+            url, "--write-thumbnail", "--skip-download",
+            "--convert-thumbnails", "jpg",
+            "--output", str(DOWNLOAD_DIR / f"thumb_{job_id}.%(ext)s"),
+            "--no-warnings", "--no-playlist",
+        ])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    if result.returncode != 0:
+        return jsonify({"error": "Failed to download thumbnail"}), 400
+
+    thumbs = list(DOWNLOAD_DIR.glob(f"thumb_{job_id}.*"))
+    if not thumbs:
+        return jsonify({"error": "Thumbnail file not found"}), 404
+
+    return send_file(str(thumbs[0]), mimetype="image/jpeg", as_attachment=False)
+
 
 @app.errorhandler(404)
 def not_found(e):
@@ -577,12 +662,13 @@ def internal_error(e):
     logger.exception("Internal server error")
     return jsonify({"error": "Internal server error"}), 500
 
+
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     port  = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("DEBUG", "false").lower() == "true"
 
-    logger.info(f"🌙 LunarMediaDL Server starting on port {port}")
+    logger.info(f"🌙 LunarYtdl Server starting on port {port}")
     logger.info(f"📂 Download directory: {DOWNLOAD_DIR}")
 
     app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
