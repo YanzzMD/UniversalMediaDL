@@ -17,15 +17,23 @@
   <div class="nebula__blob nebula__blob--1"></div><div class="nebula__blob nebula__blob--2"></div><div class="nebula__blob nebula__blob--3"></div>
 </div>
 
+<!-- HEADER -->
 <header class="header" id="header">
   <nav class="nav container">
-    <a href="index.html" class="logo">
+    <a href="index.html" class="logo" aria-label="LunarMediaDL Home">
       <img class="logo__icon" src="logo.png" alt="LunarMediaDL" width="36" height="36" style="border-radius:50%;object-fit:cover;">
       <span class="logo__text">Lunar<span class="logo__accent">MediaDL</span></span>
     </a>
+
     <ul class="nav__links" role="list">
-      <li><a href="index.html" class="nav__link">← Back to Home</a></li>
+      <li><a href="index.html" class="nav__link">← Back to Platforms</a></li>
+      <li><a href="downloader.html" class="nav__link">YouTube DL</a></li>
     </ul>
+
+    <!-- Ini adalah tombol menu garis tiga untuk mobile -->
+    <button class="nav__burger" id="navBurger" aria-label="Toggle menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
 </header>
 
