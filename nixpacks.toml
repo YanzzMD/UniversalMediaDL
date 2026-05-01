@@ -1,14 +1,5 @@
 [phases.setup]
-aptPkgs = ["ffmpeg", "curl", "unzip"]
+nixPkgs = ["...", "ffmpeg", "deno"]
 
 [phases.install]
-cmds = [
-  # Install Deno (JS runtime) — diperlukan yt-dlp untuk nsig extraction YouTube
-  "curl -fsSL https://deno.land/install.sh | sh",
-  # Update yt-dlp ke versi terbaru setelah pip install
-  "pip install -U yt-dlp"
-]
-
-[variables]
-DENO_INSTALL = "/root/.deno"
-PATH = "/root/.deno/bin:$PATH"
+cmds = ["pip install -U yt-dlp"]
