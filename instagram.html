@@ -138,6 +138,39 @@
   </div>
 </section>
 
+  <!-- History Toggle Button (hamburger, bottom-left) -->
+<button class="history-toggle-btn" id="historyToggleBtn" aria-label="Download History" title="Download History">
+  <svg viewBox="0 0 24 24" fill="none" width="20" height="20">
+    <line x1="3" y1="6" x2="21" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <line x1="3" y1="12" x2="21" y2="12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    <line x1="3" y1="18" x2="21" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+</button>
+
+<!-- History Panel -->
+<div class="history-panel" id="historyPanel" aria-hidden="true">
+  <div class="history-panel__backdrop" id="historyBackdrop"></div>
+  <div class="history-panel__sheet">
+    <div class="history-panel__header">
+      <div class="history-panel__title">
+        <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Download History
+      </div>
+      <div class="history-panel__actions">
+        <button class="btn btn--ghost btn--sm" id="clearHistoryBtn">Clear All</button>
+        <button class="history-panel__close" id="historyCloseBtn" aria-label="Close history">
+          <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="history-panel__body" id="historyList">
+      <div class="history-empty" id="historyEmpty">
+        <svg viewBox="0 0 24 24" fill="none" width="40" height="40" opacity="0.3"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke="currentColor" stroke-width="1.5"/></svg>
+        <p>No downloads yet.<br/>Your history will appear here.</p>
+      </div>
+    </div>
+  </div>
+</div>
 <!-- Toast & Footers -->
 <div class="toast-container" id="toastContainer"></div>
 <div class="creator-credit">Created by <strong>Syawaliuz Octavian</strong></div>
