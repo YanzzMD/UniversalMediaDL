@@ -20,7 +20,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs
 
-from flask import Flask, request, jsonify, send_file, Response, stream_with_context
+from flask import Flask, request, jsonify, send_file, Response, stream_with_context, send_from_directory
 from flask_cors import CORS
 
 # ─── Configuration ────────────────────────────────────────────────────────────
@@ -30,28 +30,7 @@ LOG_DIR      = BASE_DIR / "logs"
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
 
-# ── Cookies Setup ─────────────────────────────────────────────────────────────
-# Prioritas:
-#   1. File cookies.txt di folder project (untuk dev lokal)
-#   2. Environment variable YOUTUBE_COOKIES_B64 (untuk Railway / repo public)
 COOKIES_FILE = BASE_DIR / "cookies.txt"
-
-def _init_cookies():
-    """Tulis cookies dari env var ke file sementara saat server start."""
-    b64 = os.environ.get("YOUTUBE_COOKIES_B64", "").strip()
-    if b64:
-        try:
-            decoded = base64.b64decode(b64)
-            COOKIES_FILE.write_bytes(decoded)
-            print(f"[LunarYtdl] ✅ Cookies loaded from environment variable ({len(decoded)} bytes)")
-        except Exception as e:
-            print(f"[LunarYtdl] ⚠️  Failed to decode YOUTUBE_COOKIES_B64: {e}")
-    elif COOKIES_FILE.exists():
-        print(f"[LunarYtdl] ✅ Cookies loaded from cookies.txt ({COOKIES_FILE.stat().st_size} bytes)")
-    else:
-        print("[LunarYtdl] ℹ️  No cookies found — age-restricted videos may fail")
-
-_init_cookies()
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -65,7 +44,7 @@ logging.basicConfig(
 logger = logging.getLogger("LunarYtdl")
 
 # ─── App Init ─────────────────────────────────────────────────────────────────
-app = Flask(__name__)
+app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ─── In-Memory Job Store ──────────────────────────────────────────────────────
@@ -106,8 +85,23 @@ def cleanup_old_files(max_age_hours: int = 4):
                 pass
 
 
+def _ensure_cookies():
+    """Decode env var ke cookies.txt — dipanggil lazy saat pertama kali dibutuhkan."""
+    b64 = os.environ.get("YOUTUBE_COOKIES_B64", "").strip()
+    if not b64:
+        return  # tidak ada env var, skip
+    if COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0:
+        return  # sudah pernah ditulis, skip
+    try:
+        decoded = base64.b64decode(b64)
+        COOKIES_FILE.write_bytes(decoded)
+        logger.info(f"Cookies written from env var ({len(decoded)} bytes)")
+    except Exception as e:
+        logger.warning(f"Failed to decode YOUTUBE_COOKIES_B64: {e}")
+
+
 def get_cookies_args() -> list:
-    """Return --cookies flag jika cookies.txt tersedia."""
+    _ensure_cookies()
     if COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0:
         return ["--cookies", str(COOKIES_FILE)]
     return []
@@ -140,6 +134,22 @@ def _find_latest_file(job_id: str = None, hint_name: str = None) -> Path | None:
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
+@app.route("/", methods=["GET"])
+def serve_index():
+    return send_from_directory(str(BASE_DIR), "index.html")
+
+@app.route("/downloader", methods=["GET"])
+@app.route("/downloader.html", methods=["GET"])
+def serve_downloader():
+    return send_from_directory(str(BASE_DIR), "downloader.html")
+
+@app.route("/<path:filename>", methods=["GET"])
+def serve_static(filename):
+    if filename.startswith("api/"):
+        from flask import abort
+        abort(404)
+    return send_from_directory(str(BASE_DIR), filename)
+
 @app.route("/api/health", methods=["GET"])
 def health_check():
     try:
@@ -150,7 +160,8 @@ def health_check():
     except Exception as e:
         ytdlp_version = f"error: {e}"
 
-    cookies_ok = COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0
+    _ensure_cookies()
+    cookies_ok  = COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0
     cookies_src = "env_var" if os.environ.get("YOUTUBE_COOKIES_B64") else ("file" if cookies_ok else "none")
     return jsonify({
         "status":         "online",
@@ -408,8 +419,6 @@ def _download_worker(job_id: str, url: str, opts: dict):
         args += ["--proxy", proxy]
     if cookies_from:
         args += ["--cookies-from-browser", cookies_from]
-
-    # ── Cookies (age-restricted / login required) ─────────────────────────────
     args += get_cookies_args()
 
     # ── Post-processing ───────────────────────────────────────────────────────
