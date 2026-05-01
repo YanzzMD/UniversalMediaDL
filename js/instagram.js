@@ -1,5 +1,5 @@
 /**
- * LunarMediaDL — TikTok Logic
+ * LunarMediaDL — Instagram Logic
  */
 (function App() {
   'use strict';
@@ -30,12 +30,12 @@
     if (!url) { urlValidation.textContent = ''; fetchBtn.disabled = true; clearBtn.classList.add('hidden'); return; }
     clearBtn.classList.remove('hidden');
     if (isValidUrl(url)) {
-      urlValidation.textContent = '✓ Valid TikTok URL';
+      urlValidation.textContent = '✓ Valid Instagram URL';
       urlValidation.className = 'url-validation success';
       urlInputWrapper.className = 'url-input-wrapper valid';
       fetchBtn.disabled = false;
     } else {
-      urlValidation.textContent = '✗ Hanya mendukung URL TikTok di halaman ini';
+      urlValidation.textContent = '✗ Hanya mendukung URL Instagram di halaman ini';
       urlValidation.className = 'url-validation error';
       urlInputWrapper.className = 'url-input-wrapper invalid';
       fetchBtn.disabled = true;
