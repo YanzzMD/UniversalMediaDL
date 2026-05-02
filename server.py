@@ -48,7 +48,7 @@ COOKIES_FILE = BASE_DIR / "cookies.txt"
 # ─── Default Proxy ────────────────────────────────────────────────────────────
 # Proxy default dipakai jika user tidak menyediakan proxy sendiri.
 # Bisa di-override via environment variable PROXY_URL di Railway.
-DEFAULT_PROXY = os.environ.get("PROXY_URL", "socks5://103.197.188.63:1080").strip()
+DEFAULT_PROXY = os.environ.get("PROXY_URL", "socks5://139.59.24.173:1080").strip()
 
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
