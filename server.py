@@ -45,6 +45,11 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 COOKIES_FILE = BASE_DIR / "cookies.txt"
 
+# ─── Default Proxy ────────────────────────────────────────────────────────────
+# Proxy default dipakai jika user tidak menyediakan proxy sendiri.
+# Bisa di-override via environment variable PROXY_URL di Railway.
+DEFAULT_PROXY = os.environ.get("PROXY_URL", "socks5://103.197.188.63:1080").strip()
+
 # ─── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -67,6 +72,7 @@ def _log_base_dir_once():
         logger.info(f"📁 BASE_DIR resolved to: {BASE_DIR}")
         logger.info(f"   index.html exists: {(BASE_DIR / 'index.html').exists()}")
         logger.info(f"   downloader.html exists: {(BASE_DIR / 'downloader.html').exists()}")
+        logger.info(f"🌐 Default proxy: {DEFAULT_PROXY or 'none'}")
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # ─── In-Memory Job Store ──────────────────────────────────────────────────────
@@ -112,7 +118,19 @@ def get_cookies_args() -> list:
     _ensure_cookies()
     if COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0:
         return ["--cookies", str(COOKIES_FILE)]
-    return[]
+    return []
+
+def get_proxy_args(user_proxy: str = None) -> list:
+    """
+    Kembalikan argumen proxy untuk yt-dlp.
+    Prioritas: proxy dari user (frontend) → env var PROXY_URL → default proxy hardcoded.
+    Kalau semua kosong, kembalikan list kosong (tidak pakai proxy).
+    """
+    proxy = (user_proxy or "").strip() or DEFAULT_PROXY
+    if proxy:
+        logger.info(f"🌐 Using proxy: {proxy}")
+        return ["--proxy", proxy]
+    return []
 
 def run_ytdlp(args: list) -> subprocess.CompletedProcess:
     cmd = ["yt-dlp"] + args
@@ -183,6 +201,8 @@ def health_check():
         "timestamp":      datetime.utcnow().isoformat(),
         "cookies_loaded": cookies_ok,
         "cookies_source": cookies_src,
+        "proxy_active":   bool(DEFAULT_PROXY),
+        "proxy":          DEFAULT_PROXY or "none",
     })
 
 @app.route("/api/info", methods=["POST"])
@@ -197,17 +217,19 @@ def fetch_info():
 
     logger.info(f"Fetching info for: {url}")
 
-    args =[
+    # Proxy dari user (manual via frontend), fallback ke default proxy
+    user_proxy = (data.get("proxy") or "").strip()
+
+    args = [
         url, "--dump-json",
         "--no-playlist" if not data.get("playlist") else "--yes-playlist",
         "--no-warnings", "--socket-timeout", "30", "--retries", "3",
-    ] + get_cookies_args()
+        "--extractor-retries", "3",
+    ] + get_cookies_args() + get_proxy_args(user_proxy)
 
-    # Apply Proxy & Cookies From Browser Settings
+    # Apply Cookies From Browser Settings
     if data.get("cookies_from_browser"):
-        args +=["--cookies-from-browser", data.get("cookies_from_browser")]
-    if data.get("proxy"):
-        args += ["--proxy", data.get("proxy")]
+        args += ["--cookies-from-browser", data.get("cookies_from_browser")]
 
     try:
         result = run_ytdlp(args)
@@ -221,7 +243,7 @@ def fetch_info():
         logger.warning(f"yt-dlp info error: {err_msg}")
         return jsonify({"error": f"Failed to fetch media info: {err_msg}"}), 400
 
-    lines =[l for l in result.stdout.strip().split("\n") if l.startswith("{")]
+    lines = [l for l in result.stdout.strip().split("\n") if l.startswith("{")]
     if not lines:
         return jsonify({"error": "No media data returned"}), 400
 
@@ -231,9 +253,9 @@ def fetch_info():
         return jsonify({"error": "Failed to parse media data"}), 500
 
     # Build format list
-    formats =[]
+    formats = []
     seen    = set()
-    for f in (meta.get("formats") or[]):
+    for f in (meta.get("formats") or []):
         fid    = f.get("format_id", "")
         ext    = f.get("ext", "")
         vcodec = f.get("vcodec", "none")
@@ -247,7 +269,7 @@ def fetch_info():
         if vcodec == "none" and acodec == "none":
             continue
 
-        label_parts =[]
+        label_parts = []
         if height:            label_parts.append(f"{height}p")
         if fps and fps > 30:  label_parts.append(f"{int(fps)}fps")
         if ext:               label_parts.append(ext.upper())
@@ -276,12 +298,12 @@ def fetch_info():
     subtitles = {}
     for lang, subs in (meta.get("subtitles") or {}).items():
         if subs:
-            subtitles[lang] =[{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
+            subtitles[lang] = [{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
 
     auto_subs = {}
     for lang, subs in (meta.get("automatic_captions") or {}).items():
         if subs:
-            auto_subs[lang] =[{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
+            auto_subs[lang] = [{"ext": s.get("ext"), "name": s.get("name", lang)} for s in subs[:3]]
 
     is_playlist    = data.get("playlist") and len(lines) > 1
     playlist_count = len(lines) if is_playlist else None
@@ -350,43 +372,44 @@ def _download_worker(job_id: str, url: str, opts: dict):
     """Background thread: runs yt-dlp and updates job state."""
     cleanup_old_files()
 
-    audio_only   = opts.get("audio_only", False)
-    audio_format = opts.get("audio_format", "mp3")
-    format_id    = opts.get("format_id", "")
-    quality      = opts.get("quality", "bestvideo+bestaudio")
-    subtitles    = opts.get("subtitles", False)
+    audio_only    = opts.get("audio_only", False)
+    audio_format  = opts.get("audio_format", "mp3")
+    format_id     = opts.get("format_id", "")
+    quality       = opts.get("quality", "bestvideo+bestaudio")
+    subtitles     = opts.get("subtitles", False)
     subtitle_lang = opts.get("subtitle_lang", "en")
-    auto_subs    = opts.get("auto_subtitles", False)
-    playlist     = opts.get("playlist", False)
-    embed_thumb  = opts.get("embed_thumbnail", False)
-    embed_meta   = opts.get("embed_metadata", True)
-    write_subs   = opts.get("write_subtitles", False)
-    sub_format   = opts.get("subtitle_format", "srt")
-    cookies_from = opts.get("cookies_from_browser")
-    rate_limit   = opts.get("rate_limit")
-    proxy        = opts.get("proxy")
+    auto_subs     = opts.get("auto_subtitles", False)
+    playlist      = opts.get("playlist", False)
+    embed_thumb   = opts.get("embed_thumbnail", False)
+    embed_meta    = opts.get("embed_metadata", True)
+    write_subs    = opts.get("write_subtitles", False)
+    sub_format    = opts.get("subtitle_format", "srt")
+    cookies_from  = opts.get("cookies_from_browser")
+    rate_limit    = opts.get("rate_limit")
+    user_proxy    = (opts.get("proxy") or "").strip()
 
     output_template = str(DOWNLOAD_DIR / "%(title)s.%(ext)s")
 
-    args =[
+    args = [
         url,
         "--output", output_template,
         "--no-warnings",
         "--socket-timeout", "60",
         "--retries", "5",
         "--fragment-retries", "5",
+        "--extractor-retries", "3",
         "--newline",
         "--progress",
     ]
 
     # ── Format selection ──────────────────────────────────────────────────────
     if audio_only:
-        args +=["-x", "--audio-format", audio_format, "--audio-quality", "0"]
+        args += ["-x", "--audio-format", audio_format, "--audio-quality", "0"]
     elif format_id:
-        # Menambahkan fallback bestaudio untuk memastikan format_id yang dipilih (HD) punya suara
-        args +=["-f", f"{format_id}+bestaudio[ext=m4a]/{format_id}+bestaudio/{format_id}"]
+        # Fallback bestaudio + ultimate fallback ke best
+        args += ["-f", f"{format_id}+bestaudio[ext=m4a]/{format_id}+bestaudio/{format_id}/bestvideo+bestaudio/best"]
     elif quality and quality not in ("best", "bestvideo+bestaudio", ""):
-        args += ["-f", f"{quality}+bestaudio[ext=m4a]/{quality}+bestaudio/{quality}"]
+        args += ["-f", f"{quality}+bestaudio[ext=m4a]/{quality}+bestaudio/{quality}/bestvideo+bestaudio/best"]
     else:
         args += ["-f", "bestvideo+bestaudio/best"]
 
@@ -394,7 +417,7 @@ def _download_worker(job_id: str, url: str, opts: dict):
     if not playlist:
         args.append("--no-playlist")
     else:
-        args +=[
+        args += [
             "--yes-playlist",
             "--output",
             str(DOWNLOAD_DIR / "%(playlist_title)s/%(playlist_index)s - %(title)s.%(ext)s"),
@@ -402,11 +425,11 @@ def _download_worker(job_id: str, url: str, opts: dict):
 
     # ── Subtitles ─────────────────────────────────────────────────────────────
     if subtitles:
-        args +=["--write-subs", "--sub-langs", subtitle_lang, "--sub-format", sub_format]
+        args += ["--write-subs", "--sub-langs", subtitle_lang, "--sub-format", sub_format]
     if auto_subs:
-        args +=["--write-auto-subs", "--sub-langs", subtitle_lang]
+        args += ["--write-auto-subs", "--sub-langs", subtitle_lang]
     if write_subs:
-        args +=["--embed-subs"]
+        args += ["--embed-subs"]
 
     # ── Metadata / Thumbnail ──────────────────────────────────────────────────
     if embed_thumb:
@@ -416,16 +439,17 @@ def _download_worker(job_id: str, url: str, opts: dict):
 
     # ── Network & Cookies ─────────────────────────────────────────────────────
     if rate_limit:
-        args +=["--rate-limit", str(rate_limit)]
-    if proxy:
-        args +=["--proxy", proxy]
+        args += ["--rate-limit", str(rate_limit)]
     if cookies_from:
-        args +=["--cookies-from-browser", cookies_from]
+        args += ["--cookies-from-browser", cookies_from]
+
+    # Proxy: user_proxy dari frontend → fallback ke default proxy
+    args += get_proxy_args(user_proxy)
     args += get_cookies_args()
 
     # ── Post-processing ───────────────────────────────────────────────────────
     if not audio_only:
-        args +=["--merge-output-format", "mp4", "--add-metadata"]
+        args += ["--merge-output-format", "mp4", "--add-metadata"]
 
     with jobs_lock:
         jobs[job_id]["status"] = "downloading"
@@ -440,8 +464,8 @@ def _download_worker(job_id: str, url: str, opts: dict):
             bufsize=1,
         )
 
-        output_filename  = None
-        last_pct         = 0
+        output_filename = None
+        last_pct        = 0
 
         for line in proc.stdout:
             line = line.strip()
@@ -609,5 +633,6 @@ if __name__ == "__main__":
     logger.info(f"📂 BASE_DIR: {BASE_DIR}")
     logger.info(f"📂 Download directory: {DOWNLOAD_DIR}")
     logger.info(f"📄 index.html found: {(BASE_DIR / 'index.html').exists()}")
+    logger.info(f"🌐 Proxy: {DEFAULT_PROXY or 'none'}")
 
     app.run(host="0.0.0.0", port=port, debug=debug, threaded=True)
